@@ -1,4 +1,6 @@
 const state = {
+  projects: [],
+  projectId: null,
   project: null,
   images: [],
   currentIndex: -1,
@@ -17,16 +19,21 @@ let startPanX = 0;
 let startPanY = 0;
 
 function updateTransform() {
-  els.canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  if (els.canvas) {
+    els.canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  }
 }
 
 const els = {
-  datasetDir: document.querySelector("#datasetDir"),
+  projectSelect: document.querySelector("#projectSelect"),
+  newProjectBtn: document.querySelector("#newProjectBtn"),
+  datasetDir: document.querySelector("#dataset_dir") || document.querySelector("#datasetDir"),
   sam2Cfg: document.querySelector("#sam2Cfg"),
   sam2Checkpoint: document.querySelector("#sam2Checkpoint"),
   device: document.querySelector("#device"),
   classes: document.querySelector("#classes"),
   saveProject: document.querySelector("#saveProject"),
+  refreshProject: document.querySelector("#refreshProject"),
   imageList: document.querySelector("#imageList"),
   imageCount: document.querySelector("#imageCount"),
   currentName: document.querySelector("#currentName"),
@@ -43,9 +50,10 @@ const els = {
   canvas: document.querySelector("#imageCanvas"),
 };
 
-const ctx = els.canvas.getContext("2d");
+const ctx = els.canvas ? els.canvas.getContext("2d") : null;
 
 function setStatus(message, type = "") {
+  if (!els.status) return;
   els.status.textContent = message;
   els.status.className = `status ${type}`.trim();
 }
@@ -63,6 +71,7 @@ async function fetchJson(url, options = {}) {
 }
 
 function renderClassOptions(classes) {
+  if (!els.classSelect) return;
   els.classSelect.innerHTML = "";
   classes.forEach((className) => {
     const option = document.createElement("option");
@@ -73,6 +82,7 @@ function renderClassOptions(classes) {
 }
 
 function drawCanvas() {
+  if (!ctx || !els.canvas) return;
   const image = state.currentImageBitmap;
   if (!image) {
     ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
@@ -102,7 +112,7 @@ function drawCanvas() {
 }
 
 function drawPolygon(polygon, fill, stroke) {
-  if (!polygon || polygon.length < 3) {
+  if (!polygon || polygon.length < 3 || !ctx) {
     return;
   }
   ctx.beginPath();
@@ -117,7 +127,8 @@ function drawPolygon(polygon, fill, stroke) {
 }
 
 function renderImageList() {
-  els.imageCount.textContent = `${state.images.length} images`;
+  if (els.imageCount) els.imageCount.textContent = `${state.images.length} images`;
+  if (!els.imageList) return;
   els.imageList.innerHTML = "";
   state.images.forEach((image, index) => {
     const item = document.createElement("button");
@@ -129,6 +140,7 @@ function renderImageList() {
 }
 
 function renderAnnotations() {
+  if (!els.annotationList) return;
   els.annotationList.innerHTML = "";
   if (!state.approvedAnnotations.length) {
     els.annotationList.innerHTML = `<div class="annotation-item">No approved annotations yet.</div>`;
@@ -142,7 +154,7 @@ function renderAnnotations() {
     remove.className = "danger";
     remove.textContent = "Delete";
     remove.addEventListener("click", async () => {
-      await fetchJson(`/api/images/${encodeURIComponent(state.currentImage.id)}/annotations/${index}`, { method: "DELETE" });
+      await fetchJson(`/api/projects/${state.projectId}/images/${encodeURIComponent(state.currentImage.id)}/annotations/${index}`, { method: "DELETE" });
       await refreshAnnotations();
       renderImageList();
       drawCanvas();
@@ -152,31 +164,99 @@ function renderAnnotations() {
   });
 }
 
+async function loadProjects() {
+  const list = await fetchJson("/api/projects");
+  state.projects = list;
+  if (!els.projectSelect) return;
+  els.projectSelect.innerHTML = "";
+  
+  if (list.length === 0) {
+    const opt = document.createElement("option");
+    opt.textContent = "No projects found";
+    opt.value = "";
+    els.projectSelect.appendChild(opt);
+    els.projectSelect.disabled = true;
+    state.projectId = null;
+    return;
+  }
+  
+  els.projectSelect.disabled = false;
+  list.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    els.projectSelect.appendChild(opt);
+  });
+  
+  if (!state.projectId || !list.find(p => p.id === state.projectId)) {
+    state.projectId = list[0].id;
+  }
+  els.projectSelect.value = state.projectId;
+}
+
+if (els.newProjectBtn) {
+  els.newProjectBtn.addEventListener("click", async () => {
+    const name = prompt("Enter new project name:");
+    if (!name) return;
+    try {
+      const p = await fetchJson("/api/projects", {
+        method: "POST",
+        body: JSON.stringify({ name })
+      });
+      state.projectId = p.id;
+      await loadProjects();
+      await loadProject();
+      setStatus(`Created project: ${name}`, "success");
+    } catch(err) {
+      setStatus(err.message, "error");
+    }
+  });
+}
+
+if (els.projectSelect) {
+  els.projectSelect.addEventListener("change", async (e) => {
+    state.projectId = e.target.value;
+    await loadProject();
+  });
+}
+
 async function loadProject() {
-  const payload = await fetchJson("/api/project");
+  if (!state.projectId) {
+    state.project = null;
+    state.images = [];
+    state.currentImageBitmap = null;
+    drawCanvas();
+    renderImageList();
+    setStatus("Create a new project to start.", "warn");
+    return;
+  }
+  const payload = await fetchJson(`/api/projects/${state.projectId}`);
   state.project = payload.project;
   state.images = payload.images;
-  els.datasetDir.value = state.project.dataset_dir || "";
-  els.sam2Cfg.value = state.project.sam2_model_cfg || "";
-  els.sam2Checkpoint.value = state.project.sam2_checkpoint || "";
-  els.device.value = state.project.device || "cpu";
-  els.classes.value = (state.project.classes || ["object"]).join("\n");
+  if (els.datasetDir) els.datasetDir.value = state.project.dataset_dir || "";
+  if (els.sam2Cfg) els.sam2Cfg.value = state.project.sam2_model_cfg || "";
+  if (els.sam2Checkpoint) els.sam2Checkpoint.value = state.project.sam2_checkpoint || "";
+  if (els.device) els.device.value = state.project.device || "cpu";
+  if (els.classes) els.classes.value = (state.project.classes || ["object"]).join("\n");
   renderClassOptions(state.project.classes || ["object"]);
   renderImageList();
   if (state.images.length && state.currentIndex === -1) {
     await loadImage(0);
   } else {
+    state.currentIndex = -1;
+    state.currentImage = null;
+    state.currentImageBitmap = null;
     drawCanvas();
   }
 }
 
 async function refreshAnnotations() {
-  if (!state.currentImage) {
+  if (!state.currentImage || !state.projectId) {
     state.approvedAnnotations = [];
     renderAnnotations();
     return;
   }
-  const payload = await fetchJson(`/api/images/${encodeURIComponent(state.currentImage.id)}/annotations`);
+  const payload = await fetchJson(`/api/projects/${state.projectId}/images/${encodeURIComponent(state.currentImage.id)}/annotations`);
   state.approvedAnnotations = payload.annotations || [];
   const currentMeta = state.images.find((item) => item.id === state.currentImage.id);
   if (currentMeta) {
@@ -205,17 +285,18 @@ async function loadImage(index) {
   const response = await fetch(state.currentImage.url);
   const blob = await response.blob();
   state.currentImageBitmap = await createImageBitmap(blob);
-  els.currentName.textContent = state.currentImage.relative_path;
+  if (els.currentName) els.currentName.textContent = state.currentImage.relative_path;
   await refreshAnnotations();
   drawCanvas();
 }
 
 async function saveProject() {
+  if (!state.projectId) return;
   const classes = els.classes.value
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
-  const payload = await fetchJson("/api/project", {
+  const payload = await fetchJson(`/api/projects/${state.projectId}`, {
     method: "POST",
     body: JSON.stringify({
       dataset_dir: els.datasetDir.value.trim(),
@@ -232,6 +313,7 @@ async function saveProject() {
 }
 
 async function runSegmentation() {
+  if (!state.projectId) return;
   if (!state.currentImage) {
     setStatus("Choose an image first.", "error");
     return;
@@ -241,7 +323,7 @@ async function runSegmentation() {
     return;
   }
   setStatus("Running SAM2...");
-  const payload = await fetchJson("/api/segment", {
+  const payload = await fetchJson(`/api/projects/${state.projectId}/segment`, {
     method: "POST",
     body: JSON.stringify({
       image_id: state.currentImage.id,
@@ -254,11 +336,12 @@ async function runSegmentation() {
 }
 
 async function approveMask() {
+  if (!state.projectId) return;
   if (!state.preview?.polygon || !state.currentImage) {
     setStatus("Preview a mask before approving it.", "error");
     return;
   }
-  await fetchJson(`/api/images/${encodeURIComponent(state.currentImage.id)}/annotations`, {
+  await fetchJson(`/api/projects/${state.projectId}/images/${encodeURIComponent(state.currentImage.id)}/annotations`, {
     method: "POST",
     body: JSON.stringify({
       class_name: els.classSelect.value,
@@ -276,11 +359,12 @@ async function approveMask() {
 }
 
 async function exportDataset() {
+  if (!state.projectId) return;
   const trainRatio = (parseFloat(document.getElementById("splitTrain").value) || 80) / 100;
   const valRatio = (parseFloat(document.getElementById("splitVal").value) || 10) / 100;
   const testRatio = (parseFloat(document.getElementById("splitTest").value) || 10) / 100;
 
-  const payload = await fetchJson("/api/export", {
+  const payload = await fetchJson(`/api/projects/${state.projectId}/export`, {
     method: "POST",
     body: JSON.stringify({
       output_dir: "exports/yolo_dataset",
@@ -293,16 +377,31 @@ async function exportDataset() {
   setStatus(`Exported YOLO dataset to ${payload.output_dir}`, "success");
 }
 
-els.saveProject.addEventListener("click", () => saveProject().catch((error) => setStatus(error.message, "error")));
-els.runSegmentation.addEventListener("click", () => runSegmentation().catch((error) => setStatus(error.message, "error")));
-els.approveMask.addEventListener("click", () => approveMask().catch((error) => setStatus(error.message, "error")));
-els.exportDataset.addEventListener("click", () => exportDataset().catch((error) => setStatus(error.message, "error")));
-els.clearClicks.addEventListener("click", () => {
-  state.clicks = [];
-  state.preview = null;
-  drawCanvas();
-  setStatus("Clicks cleared.");
-});
+if (els.refreshProject) {
+  els.refreshProject.addEventListener("click", async () => {
+    try {
+      setStatus("Scanning folder for new images...");
+      await loadProject();
+      setStatus(`Dataset reloaded. Found ${state.images.length} total images.`, "success");
+    } catch (error) {
+      setStatus(error.message, "error");
+    }
+  });
+}
+
+if (els.saveProject) els.saveProject.addEventListener("click", () => saveProject().catch((error) => setStatus(error.message, "error")));
+if (els.runSegmentation) els.runSegmentation.addEventListener("click", () => runSegmentation().catch((error) => setStatus(error.message, "error")));
+if (els.approveMask) els.approveMask.addEventListener("click", () => approveMask().catch((error) => setStatus(error.message, "error")));
+if (els.exportDataset) els.exportDataset.addEventListener("click", () => exportDataset().catch((error) => setStatus(error.message, "error")));
+if (els.clearClicks) {
+  els.clearClicks.addEventListener("click", () => {
+    state.clicks = [];
+    state.preview = null;
+    drawCanvas();
+    setStatus("Clicks cleared.");
+  });
+}
+
 if (els.resetView) {
   els.resetView.addEventListener("click", () => {
     zoom = 1;
@@ -311,31 +410,37 @@ if (els.resetView) {
     updateTransform();
   });
 }
-els.prevImage.addEventListener("click", () => {
-  if (state.currentIndex > 0) {
-    loadImage(state.currentIndex - 1).catch((error) => setStatus(error.message, "error"));
-  }
-});
-els.nextImage.addEventListener("click", () => {
-  if (state.currentIndex < state.images.length - 1) {
-    loadImage(state.currentIndex + 1).catch((error) => setStatus(error.message, "error"));
-  }
-});
+if (els.prevImage) {
+  els.prevImage.addEventListener("click", () => {
+    if (state.currentIndex > 0) {
+      loadImage(state.currentIndex - 1).catch((error) => setStatus(error.message, "error"));
+    }
+  });
+}
+if (els.nextImage) {
+  els.nextImage.addEventListener("click", () => {
+    if (state.currentIndex < state.images.length - 1) {
+      loadImage(state.currentIndex + 1).catch((error) => setStatus(error.message, "error"));
+    }
+  });
+}
 
-els.canvas.addEventListener("click", (event) => {
-  if (!state.currentImageBitmap) {
-    return;
-  }
-  const rect = els.canvas.getBoundingClientRect();
-  const scaleX = els.canvas.width / rect.width;
-  const scaleY = els.canvas.height / rect.height;
-  const x = (event.clientX - rect.left) * scaleX;
-  const y = (event.clientY - rect.top) * scaleY;
-  state.clicks.push({ x, y, label: event.shiftKey ? 0 : 1 });
-  state.preview = null;
-  drawCanvas();
-  setStatus(`Added ${event.shiftKey ? "negative" : "positive"} click at (${Math.round(x)}, ${Math.round(y)}).`);
-});
+if (els.canvas) {
+  els.canvas.addEventListener("click", (event) => {
+    if (!state.currentImageBitmap) {
+      return;
+    }
+    const rect = els.canvas.getBoundingClientRect();
+    const scaleX = els.canvas.width / rect.width;
+    const scaleY = els.canvas.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+    state.clicks.push({ x, y, label: event.shiftKey ? 0 : 1 });
+    state.preview = null;
+    drawCanvas();
+    setStatus(`Added ${event.shiftKey ? "negative" : "positive"} click at (${Math.round(x)}, ${Math.round(y)}).`);
+  });
+}
 
 const canvasWrapper = document.querySelector(".canvas-wrapper");
 if (canvasWrapper) {
@@ -382,10 +487,10 @@ if (canvasWrapper) {
   canvasWrapper.addEventListener("contextmenu", (e) => e.preventDefault());
 }
 
-const toggleLeft = document.getElementById("toggleLeft");
-const toggleRight = document.getElementById("toggleRight");
-const panelLeft = document.querySelector(".panel-left");
-const panelRight = document.querySelector(".panel-right");
+const toggleLeft = document.getElementById("toggleLeft") || document.getElementById("toggle-left");
+const toggleRight = document.getElementById("toggleRight") || document.getElementById("toggle-right");
+const panelLeft = document.querySelector(".panel-left") || document.getElementById("panel-left");
+const panelRight = document.querySelector(".panel-right") || document.getElementById("panel-right");
 
 if (toggleLeft) {
   toggleLeft.addEventListener("click", () => panelLeft.classList.toggle("collapsed"));
@@ -394,4 +499,27 @@ if (toggleRight) {
   toggleRight.addEventListener("click", () => panelRight.classList.toggle("collapsed"));
 }
 
-loadProject().catch((error) => setStatus(error.message, "error"));
+const deleteProjectBtn = document.getElementById("deleteProjectBtn");
+if (deleteProjectBtn) {
+  deleteProjectBtn.addEventListener("click", async () => {
+    if (!state.projectId) return;
+    if (confirm("Are you sure you want to permanently delete this project entirely? All annotations tracking will be lost!")) {
+      try {
+        await fetchJson(`/api/projects/${state.projectId}`, { method: "DELETE" });
+        window.location.reload();
+      } catch (error) {
+        setStatus(error.message, "error");
+      }
+    }
+  });
+}
+
+// Initial bootstrap
+(async () => {
+  try {
+    await loadProjects();
+    await loadProject();
+  } catch(error) {
+    setStatus(error.message, "error");
+  }
+})();

@@ -15,12 +15,21 @@
     <!-- Floating UI Panels -->
     <div class="ui-layer">
       <!-- Left Panel: Settings and Image List -->
-      <aside class="floating-panel panel-left scrollable">
+      <aside id="panel-left" class="floating-panel panel-left scrollable">
         <button id="toggleLeft" class="collapse-btn left-collapse">‹</button>
+
+        <div class="panel-section" style="padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+          <h2>Project Config</h2>
+          <label>Active Project</label>
+          <div class="row" style="margin-bottom: 0;">
+            <select id="projectSelect" style="flex: 1; margin-bottom: 0; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 6px; border-radius: 4px;"></select>
+            <button id="newProjectBtn" class="primary-accent" style="flex: 0 0 auto; margin-bottom: 0; margin-left: 8px;">+ New</button>
+          </div>
+        </div>
+
         <div class="panel-section">
-          <h1>SAM2 Builder</h1>
-          <label>Dataset folder</label>
-          <input id="datasetDir" placeholder="/path/to/images" />
+          <label for="dataset_dir">Dataset Directory (Absolute Path)</label>
+          <input id="dataset_dir" placeholder="/path/to/images" />
           <label>SAM2 config</label>
           <input id="sam2Cfg" placeholder="sam2.1_hiera_t.yaml" />
           <label>SAM2 checkpoint</label>
@@ -29,7 +38,10 @@
           <input id="device" placeholder="cuda or cpu" value="cpu" />
           <label>Classes</label>
           <textarea id="classes" rows="3" placeholder="one class per line"></textarea>
-          <button id="saveProject">Save Project</button>
+          <div class="row">
+            <button id="saveProject" class="primary-accent">Save Settings</button>
+            <button id="refreshProject" class="secondary" title="Scan for new images">↻ Reload Dataset</button>
+          </div>
         </div>
 
         <div class="panel-section flex-grow">
@@ -38,6 +50,10 @@
             <span id="imageCount">0 images</span>
           </div>
           <div id="imageList" class="image-list"></div>
+        </div>
+
+        <div class="panel-section">
+          <button id="deleteProjectBtn" class="danger-btn">Delete Current Project</button>
         </div>
       </aside>
 
