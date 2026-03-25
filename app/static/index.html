@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SAM2 YOLO Dataset Builder</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- Full Screen Background Image Canvas -->
+    <main class="canvas-wrapper">
+      <canvas id="imageCanvas"></canvas>
+    </main>
+
+    <!-- Floating UI Panels -->
+    <div class="ui-layer">
+      <!-- Left Panel: Settings and Image List -->
+      <aside class="floating-panel panel-left scrollable">
+        <button id="toggleLeft" class="collapse-btn left-collapse">‹</button>
+        <div class="panel-section">
+          <h1>SAM2 Builder</h1>
+          <label>Dataset folder</label>
+          <input id="datasetDir" placeholder="/path/to/images" />
+          <label>SAM2 config</label>
+          <input id="sam2Cfg" placeholder="sam2.1_hiera_t.yaml" />
+          <label>SAM2 checkpoint</label>
+          <input id="sam2Checkpoint" placeholder="sam2.1_hiera_tiny.pt" />
+          <label>Device</label>
+          <input id="device" placeholder="cuda or cpu" value="cpu" />
+          <label>Classes</label>
+          <textarea id="classes" rows="3" placeholder="one class per line"></textarea>
+          <button id="saveProject">Save Project</button>
+        </div>
+
+        <div class="panel-section flex-grow">
+          <div class="row header-row">
+            <h2>Images</h2>
+            <span id="imageCount">0 images</span>
+          </div>
+          <div id="imageList" class="image-list"></div>
+        </div>
+      </aside>
+
+      <!-- Center Top overlay: Image Info & Primary Actions -->
+      <header class="floating-panel panel-top">
+        <div class="top-content">
+          <div class="image-info">
+            <div id="currentName">No image loaded</div>
+            <div class="hint">Left click: Pos • Shift+click: Neg • Right-click drag: Pan • Scroll: Zoom</div>
+          </div>
+          <div class="controls-row">
+            <button id="prevImage" class="secondary icon-btn">‹</button>
+            <button id="nextImage" class="secondary icon-btn">›</button>
+            <div class="divider"></div>
+            <button id="resetView" class="secondary icon-btn" title="Reset Zoom/Pan">↺</button>
+            <div class="divider"></div>
+            <button id="clearClicks" class="secondary">Clear Clicks</button>
+            <button id="runSegmentation" class="primary-accent">Preview Mask</button>
+          </div>
+        </div>
+        <div id="status" class="status">Configure dataset and paths, then choose an image.</div>
+      </header>
+
+      <!-- Right Panel: Classes & Export -->
+      <aside class="floating-panel panel-right scrollable">
+        <button id="toggleRight" class="collapse-btn right-collapse">›</button>
+        <div class="panel-section">
+          <label>Label selected as</label>
+          <select id="classSelect"></select>
+          <button id="approveMask" class="success-btn">Approve Mask</button>
+        </div>
+
+        <div class="panel-section flex-grow">
+          <h2>Annotations</h2>
+          <div id="annotationList" class="annotation-list"></div>
+        </div>
+
+        <div class="panel-section">
+          <label>Train / Val / Test Split (%)</label>
+          <div class="row" style="margin-bottom: 12px; gap: 4px;">
+            <input type="number" id="splitTrain" value="80" min="0" max="100" style="margin-bottom: 0;" title="Train %">
+            <input type="number" id="splitVal" value="10" min="0" max="100" style="margin-bottom: 0;" title="Val %">
+            <input type="number" id="splitTest" value="10" min="0" max="100" style="margin-bottom: 0;" title="Test %">
+          </div>
+          <button id="exportDataset" class="danger-btn">Export YOLO Dataset</button>
+        </div>
+      </aside>
+    </div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
